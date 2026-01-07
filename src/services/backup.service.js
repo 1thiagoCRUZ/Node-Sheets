@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { logger } from '../utils/logger.js';
 
 const BACKUP_DIR = './backups';
 
@@ -22,8 +23,8 @@ export async function saveBackup(data, sourceName) {
     const content = JSON.stringify(data) + '\n';
     
     await fs.appendFile(filePath, content);
-    console.log(`[BACKUP] - Backup salvo em: ${filename}`);
+    logger.info(`[BACKUP] Salvo em: ${filename}`);
   } catch (err) {
-    console.error("Erro ao salvar backup físico:", err);
+    logger.error(`Erro ao salvar backup físico: ${err.message}`);
   }
 }

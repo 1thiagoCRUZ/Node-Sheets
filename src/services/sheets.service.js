@@ -1,5 +1,6 @@
 import { getSheetsClient } from '../config/google.js';
 import { ENV } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 
 export async function getExistingIds(sheetName) {
   const client = getSheetsClient();
@@ -14,13 +15,13 @@ export async function getExistingIds(sheetName) {
 
     return rows.flat().map(id => String(id));
   } catch (error) {
-    console.error(`Erro ao ler IDs de ${sheetName}:`, error.message);
+    logger.error(`Erro ao ler IDs de ${sheetName}: ${error.message}`);
     return [];
   }
 }
 
 export async function saveToSheets(rows, sheetName) {
-  const client = getSheetsClient(); 
+  const client = getSheetsClient();
   
   const values = rows.map(r => {
       const arrayRow = Array.isArray(r) ? r : Object.values(r);
@@ -34,8 +35,10 @@ export async function saveToSheets(rows, sheetName) {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values }
       });
-      console.log(`[SUCCESS] - ✅ ${rows.length} novos itens salvos em ${sheetName}`);
+      
+      logger.info(`[SHEETS] ${rows.length} itens salvos em ${sheetName}`);
   } catch (error) {
-      console.error(`Erro ao salvar em ${sheetName}:`, error.message);
+      logger.error(`Erro ao salvar em ${sheetName}: ${error.message}`);
+      throw error;
   }
 }

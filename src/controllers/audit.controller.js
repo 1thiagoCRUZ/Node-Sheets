@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { logger } from '../utils/logger.js';
 
 const BACKUP_DIR = './backups';
 
@@ -7,6 +8,12 @@ export async function getAuditByDate(req, res) {
     const { date } = req.params;
     
     try {
+        try {
+            await fs.access(BACKUP_DIR);
+        } catch {
+            return res.json([]);
+        }
+
         const files = await fs.readdir(BACKUP_DIR);
         const targetFiles = files.filter(file => file.startsWith(date));
 
@@ -27,7 +34,7 @@ export async function getAuditByDate(req, res) {
                     const jsonBatch = JSON.parse(line);
                     combinedData = combinedData.concat(jsonBatch);
                 } catch (err) {
-                    console.error("Linha corrompida ignorada:", err);
+                    logger.warn(`Linha corrompida ignorada no backup ${file}: ${err.message}`);
                 }
             });
         }
@@ -35,6 +42,7 @@ export async function getAuditByDate(req, res) {
         return res.json(combinedData);
 
     } catch (error) {
+        logger.error(`Erro ao ler auditoria: ${error.message}`);
         return res.status(500).json({ error: error.message });
     }
 }
