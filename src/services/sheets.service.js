@@ -1,44 +1,70 @@
 import { getSheetsClient } from '../config/google.js';
 import { ENV } from '../config/env.js';
-import { logger } from '../utils/logger.js';
 
-export async function getExistingIds(sheetName) {
-  const client = getSheetsClient();
-  try {
+export async function upsertData(rows, sheetName, keyIndex = 0) {
+    const client = getSheetsClient();
+    
     const response = await client.spreadsheets.values.get({
-      spreadsheetId: ENV.GOOGLE_SHEETS_ID,
-      range: `${sheetName}!C:C`,
+        spreadsheetId: ENV.GOOGLE_SHEETS_ID,
+        range: `${sheetName}!A:Z`, 
     });
 
-    const rows = response.data.values;
-    if (!rows || rows.length === 0) return [];
+    const existingRows = response.data.values || [];
+    const updates = []; // Lista para atualizar
+    const appends = []; // Lista para append
+    const rowMap = new Map();
 
-    return rows.flat().map(id => String(id));
-  } catch (error) {
-    logger.error(`Erro ao ler IDs de ${sheetName}: ${error.message}`);
-    return [];
-  }
+    existingRows.forEach((row, index) => {
+        if (index === 0) return;
+        
+        const key = String(row[keyIndex] || '').trim();
+        
+        if (key) rowMap.set(key, { rowIndex: index + 1, data: row });
+    });
+
+    for (const newRow of rows) {
+        const formattedNewRow = newRow.map(cell => (cell === null || cell === undefined) ? '' : String(cell));
+        
+        const key = formattedNewRow[keyIndex];
+        const existing = rowMap.get(key);
+
+        if (existing) {
+            const currentStr = existing.data.join('|');
+            const newStr = formattedNewRow.join('|');
+
+            if (currentStr !== newStr) {
+                updates.push({
+                    range: `${sheetName}!A${existing.rowIndex}`, // Atualiza a linha exata
+                    values: [formattedNewRow]
+                });
+            }
+        } else {
+            appends.push(formattedNewRow);
+        }
+    }
+
+    if (updates.length > 0) {
+        await client.spreadsheets.values.batchUpdate({
+            spreadsheetId: ENV.GOOGLE_SHEETS_ID,
+            resource: {
+                valueInputOption: 'USER_ENTERED',
+                data: updates
+            }
+        });
+    }
+
+    if (appends.length > 0) {
+        await client.spreadsheets.values.append({
+            spreadsheetId: ENV.GOOGLE_SHEETS_ID,
+            range: `${sheetName}!A:A`,
+            valueInputOption: 'USER_ENTERED',
+            resource: { values: appends }
+        });
+    }
+
+    return { updated: updates.length, added: appends.length };
 }
 
-export async function saveToSheets(rows, sheetName) {
-  const client = getSheetsClient();
-  
-  const values = rows.map(r => {
-      const arrayRow = Array.isArray(r) ? r : Object.values(r);
-      return arrayRow.map(cell => String(cell)); 
-  });
-
-  try {
-      await client.spreadsheets.values.append({
-        spreadsheetId: ENV.GOOGLE_SHEETS_ID,
-        range: `${sheetName}!A1`, 
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values }
-      });
-      
-      logger.info(`[SHEETS] ${rows.length} itens salvos em ${sheetName}`);
-  } catch (error) {
-      logger.error(`Erro ao salvar em ${sheetName}: ${error.message}`);
-      throw error;
-  }
+export function getSheetsClientWrapper() {
+     return getSheetsClient();
 }

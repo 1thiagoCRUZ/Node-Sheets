@@ -1,130 +1,77 @@
-import fs from 'fs/promises';
+import fs from 'fs';
 import path from 'path';
+import axios from 'axios';
+import { ENV } from '../config/env.js';
 import { logger } from '../utils/logger.js';
-import { now } from '../utils/date.js';
-// import { ENV } from '../config/env.js';
-// import axios from 'axios';
 
-async function getLocalMockData() {
+let cachedToken = null;
+
+
+async function getAuthToken() {
+    if (cachedToken) return cachedToken;
+
     try {
-        const filePath = path.join(process.cwd(), 'mocks', 'callbox.json');
-
-        try {
-            await fs.access(filePath);
-        } catch {
-            throw new Error(`Arquivo de mock não encontrado em: ${filePath}`);
-        }
-
-        const rawData = await fs.readFile(filePath, 'utf-8');
-        return JSON.parse(rawData).data;
-    } catch (err) {
-        logger.error(`Erro ao ler Mock Local: ${err.message}`);
-        return null;
-    }
-}
-
-/* Dps q tiver acesso a API do callbox podemos testar isso aqui abaixo
-async function loginCallbox() {
-    try {
-        logger.info("Realizando autenticação nO Callbox...");
-        
+        logger.info("Autenticando na Callbox...");
         const response = await axios.post(`${ENV.CALLBOX_LOGIN_URL}`, {
             login: ENV.CALLBOX_USER, 
             pass: ENV.CALLBOX_PASS,
             product: "callbox",
             device: "desktop"
-        }, {
-            headers: { "Content-Type": "application/json" }
         });
 
-        if (response.status !== 200 || !response.data.data) {
-             throw new Error("Token inválido.");
+        if (response.data && response.data.data) {
+            cachedToken = response.data.data;
+            return cachedToken;
+        } else {
+            throw new Error("Token não retornado pela API.");
         }
-
-        logger.info("Sucesso.");
-        return response.data.data;
-
     } catch (error) {
-        logger.error(`Falha na autenticação: ${error.message}`);
+        logger.error(`Erro na Autenticação: ${error.message}`);
         throw error;
     }
 }
 
-async function fetchApiData() {
-    if (!cachedToken) {
-        cachedToken = await loginCallbox();
-    }
-
-    try {
-        const response = await axios.post(`${ENV.CALLBOX_LOGIN_URL}/reports/calls`, {
-        }, {
-            headers: {
-                'Authorization': `Bearer ${cachedToken}`,
-                'Content-Type': 'application/json'
-            }
-        });
+export async function fetchData(task) {
+    if (process.env.USE_MOCK === 'true') {
+        const filePath = path.resolve(`mocks/${task.mockFile}`);
         
-        return response.data.data;
-
-    } catch (error) {
-        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-            logger.warn("Token expirado.");
-            cachedToken = null;
+        try {
+            if (!fs.existsSync(filePath)) {
+                throw new Error(`Mock não encontrado: ${task.mockFile}`);
+            }
+            logger.info(`[MOCK] Lendo: ${task.mockFile}`);
+            const rawData = fs.readFileSync(filePath, 'utf-8');
+            return JSON.parse(rawData); 
+        } catch (err) {
+            logger.error(`Erro ao ler mock: ${err.message}`);
+            return { data: { result: [] } }; 
         }
-        throw error;
     }
-}
-*/
 
-export async function getAllData() {
-    const dados = {
-        resumo: [],
-        analistas: []
-    };
+    else {
+        try {
+            const token = await getAuthToken();
 
-    try {
-        const rawData = await getLocalMockData();
-        // const rawData = await fetchRealApiData();
-
-        if (!rawData) {
-            logger.warn("Nenhum dado retornado");
-            return dados;
-        }
-
-        logger.info("Lendo dados da API...");
-
-        const dataReferencia = rawData.date || new Date().toISOString().split('T')[0];
-
-        if (rawData.summary) {
-            dados.resumo.push([
-                now(),              // A: Data Hora da Execução
-                "CALLBOX",          // B: Fonte
-                dataReferencia,     // C: ID (Data do dia)
-                rawData.summary.receptivo?.total || 0,
-                rawData.summary.ativo?.total || 0,
-                rawData.summary.positivo || 0,
-                rawData.summary.negativo || 0
-            ]);
-        }
-
-        if (rawData.agents && Array.isArray(rawData.agents)) {
-            rawData.agents.forEach(agente => {
-                dados.analistas.push([
-                    now(),              // A: Data
-                    dataReferencia,     // B: Data Referência
-                    agente.name,        // C: Nome do Analista
-                    agente.team,        // D: Time/Equipe
-                    agente.total_calls, // E: Total Chamadas
-                    agente.answered,    // F: Atendidas
-                    agente.abandoned,   // G: Abandonadas
-                    agente.positive     // H: Positivas
-                ]);
+            logger.info(`[API] Buscando: ${task.endpoint}`);
+            
+            const response = await axios.get(`${ENV.CALLBOX_LOGIN_URL}/${task.endpoint}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    date: new Date().toISOString().split('T')[0]
+                }
             });
+
+            return response.data;
+
+        } catch (error) {
+            if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+                logger.warn("Token expirado. Será renovado na próxima execução.");
+                cachedToken = null;
+            }
+            throw error;
         }
-
-    } catch (err) {
-        logger.error(`Falha ao processar dados da API: ${err.message}`);
     }
-
-    return dados;
 }

@@ -1,9 +1,9 @@
 import { syncJob } from '../jobs/sync.job.js';
-import { logsMemoria, logger } from '../utils/logger.js';
+import { logger } from '../utils/logger.js';
 
-export function getRealtimeLogs(req, res) {
-    res.json(logsMemoria);
-}
+// export function getRealtimeLogs(req, res) {
+//     res.json(logsMemoria);
+// }
 
 export async function forceSync(req, res) {
     logger.warn("Gatilho manual de Sincronização acionado via API");

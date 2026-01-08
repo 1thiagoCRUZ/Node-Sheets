@@ -1,71 +1,100 @@
-import { getAllData } from '../services/api.service.js';
-import { saveToSheets, getExistingIds } from '../services/sheets.service.js';
-import { saveBackup } from '../services/backup.service.js';
+import { fetchData } from '../services/data.service.js';
+import { upsertData } from '../services/sheets.service.js';
+import { MAPPERS } from '../utils/mappers.js';
 import { acquireLock, releaseLock } from '../utils/lock.js';
 import { logger } from '../utils/logger.js';
-import { ENV } from '../config/env.js';
+
+const TASKS = [
+  {
+    name: 'Efetuadas',
+    endpoint: 'relatorios/chamadas_efetuadas',
+    mockFile: 'efetuadas.json',
+    sheetName: 'Efetuadas',
+    mapper: 'listaChamadas',
+    keyIndex: 0 // Usa Data como chave
+  },
+  {
+    name: 'Perdidas',
+    endpoint: 'relatorios/chamadas_perdidas',
+    mockFile: 'perdidas.json',
+    sheetName: 'Perdidas',
+    mapper: 'listaChamadasPerdidas',
+    keyIndex: 0
+  },
+  {
+    name: 'Analistas',
+    endpoint: 'relatorios/resumo_agente',
+    mockFile: 'resumoporagente.json',
+    sheetName: 'Analistas',
+    mapper: 'resumoAgente',
+    keyIndex: 1 // Usa ID do Agente como chave
+  },
+  {
+    name: 'Pausas',
+    endpoint: 'relatorios/pausas',
+    mockFile: 'pausaslogin.json',
+    sheetName: 'Pausas',
+    mapper: 'listaPausas',
+    keyIndex: 3 // Usa Data de Início
+  },
+  {
+    name: 'Resumo Geral',
+    endpoint: 'dashboard/resumo',
+    mockFile: 'resumos.json',
+    sheetName: 'Resumo',
+    mapper: 'resumoGeral',
+    keyIndex: 0 // Usa Data de Hoje
+  }
+];
 
 export const executionHistory = [];
 
 export async function syncJob() {
-  if (!acquireLock()) {
-    logger.warn("Job bloqueado -> Uma execução já está em andamento.");
-    return;
-  }
+  if (!acquireLock()) return;
 
   const startTime = new Date();
-  let status = 'Sucesso';
   let details = '';
 
   try {
-    logger.info("[JOB] Iniciando Sincronização...");
+    logger.info("[JOB] Iniciando Sync...");
 
-    const pacoteDados = await getAllData();
+    for (const task of TASKS) {
+      try {
+        const jsonData = await fetchData(task);
 
-    let salvouResumo = false;
-    
-    if (pacoteDados.resumo && pacoteDados.resumo.length > 0) {
-      await saveBackup(pacoteDados.resumo, 'Resumo');
+        const rows = MAPPERS[task.mapper](jsonData);
 
-      const idsExistentes = await getExistingIds(ENV.SHEET_NAME_RESUMO);
+        if (!rows || rows.length === 0) {
+          logger.warn(`[${task.name}] Sem dados para sincronizar.`);
+          continue;
+        }
 
-      const resumoNovo = pacoteDados.resumo.filter(linha => !idsExistentes.includes(String(linha[2])));
+        const result = await upsertData(rows, task.sheetName, task.keyIndex);
 
-      if (resumoNovo.length > 0) {
-        await saveToSheets(resumoNovo, ENV.SHEET_NAME_RESUMO);
-        salvouResumo = true;
-        details += `Resumo diário salvo. `;
-      } else {
-        details += `Resumo já existe (dia atual ignorado). `;
+        const logMsg = `[${task.name}: +${result.added}/Upd${result.updated}]`;
+        logger.info(logMsg);
+        details += logMsg + ' ';
+
+      } catch (taskError) {
+        logger.error(`[ERRO] - Falha em ${task.name}: ${taskError.message}`);
+        details += `[${task.name}: FALHA] `;
       }
     }
-    if (salvouResumo && pacoteDados.analistas && pacoteDados.analistas.length > 0) {
-        
-        await saveBackup(pacoteDados.analistas, 'Analistas');
-        
-        await saveToSheets(pacoteDados.analistas, ENV.SHEET_NAME_ANALISTAS);
-        
-        details += `Detalhe de ${pacoteDados.analistas.length} analistas salvo.`;
-    } else if (!salvouResumo && pacoteDados.analistas.length > 0) {
-        details += `Analistas ignorados (já salvos hoje).`;
-    }
 
-    logger.info(`Fim do Job. ${details}`);
+    logger.info(`Fim do Job.`);
 
   } catch (err) {
-    logger.error(`Erro no Job: ${err.message}`);
-    status = 'Erro';
-    details = err.message;
-
+    logger.error(`Erro Crítico no Job: ${err.message}`);
   } finally {
     releaseLock();
 
+    const duration = ((new Date() - startTime) / 1000).toFixed(2);
+    logger.info(`Job finalizado em ${duration}s. Detalhes: ${details}`);
     executionHistory.unshift({
       time: startTime.toISOString(),
-      status: status,
+      duration: `${duration}s`,
       details: details
     });
-
     if (executionHistory.length > 50) executionHistory.pop();
   }
 }

@@ -2,3 +2,5 @@
 .env
 node-sheets-integration-483002-f89d9cf94a36.json
 /backups
+/logs
+/mocks
