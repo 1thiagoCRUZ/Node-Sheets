@@ -1,4 +1,4 @@
-import { now } from "./date.js";
+import { now, timeToSeconds } from "./date.js";
 
 const safe = (val) => val || '-';
 
@@ -7,13 +7,15 @@ export const MAPPERS = {
     // Para as chamadas
     listaChamadas: (json) => {
         const lista = json.data.result || [];
-        return lista.map(item => [
-            safe(item.date),            // A: Data
-            safe(item.nameAgent),       // B: Agente
-            safe(item.destiny),         // C: Telefone
-            safe(item.status),          // D: Status 
-            safe(item.duration)         // E: Duração
-        ]);
+
+        return lista.filter(item => timeToSeconds(item.duration) >= 30)
+            .map(item => [
+                safe(item.date),
+                safe(item.nameAgent),
+                safe(item.destiny),
+                safe(item.status),
+                safe(item.duration)
+            ]);
     },
 
     listaChamadasPerdidas: (json) => {
@@ -27,7 +29,7 @@ export const MAPPERS = {
         ]);
     },
 
-    // Para as informações das pauas
+    // Para as informações das pausas
     listaPausas: (json) => {
         const lista = json.data.result || [];
         return lista.map(item => [
@@ -53,18 +55,33 @@ export const MAPPERS = {
         ]);
     },
 
-    // Dados gerais do callcenter
-    resumoGeral: (json) => {
-        const r = json.data.result || {};
+    // Dados gerais do callcenter, por causa do date n ta funfando provavelmente
+    resumoReceptivos: (json) => {
+        const data = json.data || {};
+        const receptivo = data.receptivo || {};
         const dataHoje = now().split('T')[0];
 
         const linha = [
             dataHoje,                           // A: Data Hoje
-            safe(r.saida?.chamadas_efetuadas),  // B: Total Efetuadas
-            safe(r.saida?.chamadas_completadas),// C: Completadas
-            safe(r.entrada?.totalAtendidas),    // D: Atendidas Entrantes
-            safe(r.entrada?.totalPerdidasChamadas) // E: Perdidas Entrantes
+            safe(receptivo.totalRegistrosReceptivos),  // B: Total Efetuadas
+            safe(receptivo.totalAtendidas),// C: Completadas
+            safe(receptivo.totalAbandonadas),    // D: Atendidas Entrantes
+            safe(receptivo.tempoMedioEspera), // E: Perdidas Entrantes
+            safe(receptivo.nivelServico)
         ];
         return [linha];
+    },
+
+    resumoAtendidas: (json) => {
+        const lista = json.data.result || [];
+        return lista.map(item => [
+            safe(item.date),           // Coluna A: Data
+            safe(item.groupCallcenter),       // Coluna B: Grupo
+            safe(item.agent),          // Coluna C: ID agente
+            safe(item.nameAgent),       // Coluna D: Nome
+            safe(item.waitingTime),       // Coluna E: Tempo espera
+            safe(item.serviceTime),         // Coluna F: Duração
+            safe(item.status)     // Coluna G: Status
+        ]);
     }
 };

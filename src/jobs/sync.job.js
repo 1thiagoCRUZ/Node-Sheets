@@ -7,7 +7,7 @@ import { logger } from '../utils/logger.js';
 const TASKS = [
   {
     name: 'Efetuadas',
-    endpoint: 'relatorios/chamadas_efetuadas',
+    endpoint: 'relatorios/callcenter/tab_efetuadas',
     mockFile: 'efetuadas.json',
     sheetName: 'Efetuadas',
     mapper: 'listaChamadas',
@@ -15,7 +15,7 @@ const TASKS = [
   },
   {
     name: 'Perdidas',
-    endpoint: 'relatorios/chamadas_perdidas',
+    endpoint: 'relatorios/agentes/tab_perdidas',
     mockFile: 'perdidas.json',
     sheetName: 'Perdidas',
     mapper: 'listaChamadasPerdidas',
@@ -23,7 +23,7 @@ const TASKS = [
   },
   {
     name: 'Analistas',
-    endpoint: 'relatorios/resumo_agente',
+    endpoint: 'relatorios/agentes/tab_resumo_por_agente',
     mockFile: 'resumoporagente.json',
     sheetName: 'Analistas',
     mapper: 'resumoAgente',
@@ -31,19 +31,27 @@ const TASKS = [
   },
   {
     name: 'Pausas',
-    endpoint: 'relatorios/pausas',
+    endpoint: 'relatorios/agentes/tab_login_pausas',
     mockFile: 'pausaslogin.json',
     sheetName: 'Pausas',
     mapper: 'listaPausas',
     keyIndex: 3 // Usa Data de Início
   },
   {
-    name: 'Resumo Geral',
-    endpoint: 'dashboard/resumo',
+    name: 'Resumo_Receptivos',
+    endpoint: 'relatorios/callcenter',
     mockFile: 'resumos.json',
-    sheetName: 'Resumo',
-    mapper: 'resumoGeral',
+    sheetName: 'Resumo_Receptivos',
+    mapper: 'resumoReceptivos',
     keyIndex: 0 // Usa Data de Hoje
+  },
+  {
+    name: 'Atendidas',
+    endpoint: 'relatorios/agentes/tab_atendidas',
+    mockFile: 'resumos.json',
+    sheetName: 'Atendidas',
+    mapper: 'resumoAtendidas',
+    keyIndex: 0
   }
 ];
 

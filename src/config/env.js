@@ -11,5 +11,7 @@ export const ENV = {
     CALLBOX_LOGIN_URL: process.env.CALLBOX_LOGIN_URL,
     CALLBOX_USER: process.env.CALLBOX_USER,
     CALLBOX_PASS: process.env.CALLBOX_PASS,
-    PORT: process.env.PORT
+    PORT: process.env.PORT,
+    USE_MOCK: process.env.USE_MOCK,
+    PREFIX_URL: process.env.PREFIX_URL
 };
